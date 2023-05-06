@@ -34,7 +34,7 @@ from electrumx.lib.util import (
     unpack_le_int32_from, unpack_le_int64_from, unpack_le_uint16_from,
     unpack_be_uint16_from,
     unpack_le_uint32_from, unpack_le_uint64_from, pack_le_int32, pack_varint,
-    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64, unpack_uint256_from, pack_uint256
+    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64, unpack_le_uint256_from, pack_le_uint256
 )
 from electrumx.lib.script import OpCodes
 
@@ -115,8 +115,8 @@ class TxContractOutput(namedtuple("TxContractOutput", "type outpoint value max_s
         return b''.join((
             pack_le_uint64(self.type),
             self.outpoint.serialize(),
-            pack_uint256(self.value),
-            pack_uint256(self.max_supply),
+            pack_le_uint256(self.value),
+            pack_le_uint256(self.max_supply),
             pack_varbytes(self.metadata),
         ))
 
@@ -339,6 +339,6 @@ class Deserializer(object):
         return result
 
     def _read_uint256(self):
-        result, = unpack_uint256_from(self.binary, self.cursor)
+        result, = unpack_le_uint256_from(self.binary, self.cursor)
         self.cursor += 32
         return result

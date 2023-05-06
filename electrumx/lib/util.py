@@ -330,16 +330,16 @@ pack_be_uint16 = struct_be_H.pack
 pack_be_uint32 = struct_be_I.pack
 pack_byte = structB.pack
 
-def pack_uint256(x):
+def pack_le_uint256(x):
     return x.to_bytes(32, byteorder='little', signed=False)
 
-def unpack_uint256(x):
+def unpack_le_uint256(x):
     return (
         int.from_bytes(x, byteorder='little', signed=False),
     )
 
-def unpack_uint256_from(binary, offset):
-    return unpack_uint256(binary[offset:offset+32])
+def unpack_le_uint256_from(binary, offset):
+    return unpack_le_uint256(binary[offset:offset + 32])
 
 hex_to_bytes = bytes.fromhex
 

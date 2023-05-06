@@ -180,7 +180,7 @@ def test_unpackers():
     assert util.unpack_le_uint32_from(b, 42) == (757869354,)
     assert util.unpack_le_uint64_from(b, 0) == (506097522914230528,)
     assert util.unpack_le_uint64_from(b, 42) == (3544384782113450794,)
-    assert util.unpack_uint256_from(b, 0) == (14074904626401341155369551180448584754667373453244490859944217516317499064576,)
+    assert util.unpack_le_uint256_from(b, 0) == (14074904626401341155369551180448584754667373453244490859944217516317499064576,)
 
 def test_hex_transforms():
     h = "AABBCCDDEEFF"
