@@ -34,12 +34,21 @@ from electrumx.lib.util import (
     unpack_le_int32_from, unpack_le_int64_from, unpack_le_uint16_from,
     unpack_be_uint16_from,
     unpack_le_uint32_from, unpack_le_uint64_from, pack_le_int32, pack_varint,
-    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64
+    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64, unpack_uint256_from, pack_uint256
 )
 from electrumx.lib.script import OpCodes
 
 ZERO = bytes(32)
 MINUS_1 = 4294967295
+
+CONTRACT_FLAG = 0x8000000000000000
+CONTRACT_FT = CONTRACT_FLAG | 0
+CONTRACT_NFT = CONTRACT_FLAG | 1
+CONTRACT_FT_MINT = CONTRACT_FLAG | 2
+CONTRACT_NFT_MINT = CONTRACT_FLAG | 3
+
+MAX_CONTRACT_TYPE = CONTRACT_FLAG | 3
+MAX_CONTRACT_METADATA_SIZE = 1024
 
 
 class Tx(namedtuple("Tx", "version inputs outputs locktime")):
@@ -58,6 +67,7 @@ class Tx(namedtuple("Tx", "version inputs outputs locktime")):
 
 class TxInput(namedtuple("TxInput", "prev_hash prev_idx script sequence")):
     '''Class representing a transaction input.'''
+
     def __str__(self):
         script = self.script.hex()
         prev_hash = hash_to_hex_str(self.prev_hash)
@@ -77,14 +87,38 @@ class TxInput(namedtuple("TxInput", "prev_hash prev_idx script sequence")):
         ))
 
 
-class TxOutput(namedtuple("TxOutput", "value pk_script")):
+class TxOutput(namedtuple("TxOutput", "value pk_script contract")):
 
     def serialize(self):
+        if self.contract:
+            return b''.join((
+                self.contract.serialize(),
+                pack_le_uint64(self.value),
+                pack_varbytes(self.pk_script),
+            ))
+        else:
+            return b''.join((
+                pack_le_int64(self.value),
+                pack_varbytes(self.pk_script),
+            ))
+
+
+class TxOutPoint(namedtuple("TxOutPoint", "hash index")):
+    def serialize(self):
         return b''.join((
-            pack_le_int64(self.value),
-            pack_varbytes(self.pk_script),
+            self.hash,
+            pack_le_uint32(self.index),
         ))
 
+class TxContractOutput(namedtuple("TxContractOutput", "type outpoint value max_supply metadata")):
+    def serialize(self):
+        return b''.join((
+            pack_le_uint64(self.type),
+            self.outpoint.serialize(),
+            pack_uint256(self.value),
+            pack_uint256(self.max_supply),
+            pack_varbytes(self.metadata),
+        ))
 
 class Deserializer(object):
     '''Deserializes blocks into transactions.
@@ -106,8 +140,8 @@ class Deserializer(object):
         '''Return a deserialized transaction.'''
         return Tx(
             self._read_le_int32(),  # version
-            self._read_inputs(),    # inputs
-            self._read_outputs(),   # outputs
+            self._read_inputs(),  # inputs
+            self._read_outputs(),  # outputs
             self._read_le_uint32()  # locktime
         )
 
@@ -118,13 +152,12 @@ class Deserializer(object):
         we process it in the natural serialized order.
         '''
         start = self.cursor
-        #return self.read_tx(), double_sha256(self.binary[start:self.cursor])
+        # return self.read_tx(), double_sha256(self.binary[start:self.cursor])
         the_tx = self.read_tx()
         if the_tx.version == 2:
             return the_tx, self.get_richtransaction(the_tx)
         else:
-          return the_tx, double_sha256(self.binary[start:self.cursor])  
-
+            return the_tx, double_sha256(self.binary[start:self.cursor])
 
     def get_richtransaction(self, tx):
         hashInputs = self.get_hashinputs(tx)
@@ -140,7 +173,7 @@ class Deserializer(object):
         ))
         h = double_sha256(preimage)
         return h
-    
+
     def get_hashinputs(self, tx):
         inputs = b''
         for txin in tx.inputs:
@@ -153,13 +186,13 @@ class Deserializer(object):
             inputs = b''.join((
                 inputs,
                 sha256(inputhash)
-                ))
+            ))
         return sha256(inputs)
 
     def get_state(self, script):
         pc = len(script)
         # opreturn + state + stateLen + version
-        if len(script) < 1+0+4+1:
+        if len(script) < 1 + 0 + 4 + 1:
             return False
 
         pc -= 5
@@ -172,7 +205,7 @@ class Deserializer(object):
 
         if script[pc - 1] != OpCodes.OP_RETURN:
             return False
-        
+
         return pc
 
     def get_hashoutputs(self, tx):
@@ -181,7 +214,7 @@ class Deserializer(object):
             outputhash = b''.join((
                 pack_le_uint64(txout.value),
                 sha256(txout.pk_script)
-                ))
+            ))
             pc = self.get_state(txout.pk_script)
             if pc:
                 outputhash = b''.join((
@@ -212,10 +245,10 @@ class Deserializer(object):
 
     def _read_input(self):
         return TxInput(
-            self._read_nbytes(32),   # prev_hash
+            self._read_nbytes(32),  # prev_hash
             self._read_le_uint32(),  # prev_idx
-            self._read_varbytes(),   # script
-            self._read_le_uint32()   # sequence
+            self._read_varbytes(),  # script
+            self._read_le_uint32()  # sequence
         )
 
     def _read_outputs(self):
@@ -223,9 +256,31 @@ class Deserializer(object):
         return [read_output() for i in range(self._read_varint())]
 
     def _read_output(self):
+        _cursor = self.cursor
+        contract_type = self._read_le_uint64()
+        contract_out = None
+        is_contract = contract_type & CONTRACT_FLAG and contract_type < MAX_CONTRACT_TYPE
+        self.cursor = _cursor
+        if is_contract: contract_out = self._read_contract_out()
         return TxOutput(
-            self._read_le_int64(),  # value
-            self._read_varbytes(),  # pk_script
+            self._read_le_int64(),
+            self._read_varbytes(),
+            contract_out,
+        )
+
+    def _read_outpoint(self):
+        return TxOutPoint(
+            self._read_nbytes(32),  # hash
+            self._read_le_uint32()  # idx
+        )
+
+    def _read_contract_out(self):
+        return TxContractOutput(
+            self._read_le_uint64(),  # contract_type
+            self._read_outpoint(),  # outpoint
+            self._read_uint256(),  # value
+            self._read_uint256(),  # max supply
+            self._read_varbytes(),  # metadata
         )
 
     def _read_byte(self):
@@ -281,4 +336,9 @@ class Deserializer(object):
     def _read_le_uint64(self):
         result, = unpack_le_uint64_from(self.binary, self.cursor)
         self.cursor += 8
+        return result
+
+    def _read_uint256(self):
+        result, = unpack_uint256_from(self.binary, self.cursor)
+        self.cursor += 32
         return result
