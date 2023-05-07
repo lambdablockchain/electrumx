@@ -263,7 +263,7 @@ class Deserializer(object):
         _cursor = self.cursor
         contract_type = self._read_le_uint64()
         contract_out = None
-        is_contract = contract_type & CONTRACT_FLAG and contract_type < MAX_CONTRACT_TYPE
+        is_contract = contract_type & CONTRACT_FLAG and MAX_CONTRACT_TYPE >= contract_type
         self.cursor = _cursor
         if is_contract: contract_out = self._read_contract_out()
         return TxOutput(
