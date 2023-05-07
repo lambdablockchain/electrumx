@@ -211,7 +211,11 @@ class Deserializer(object):
     def get_hashoutputs(self, tx):
         outputs = b''
         for txout in tx.outputs:
+            outputhash = b''
+            if txout.contract is not None:
+                outputhash = txout.contract.serialize()
             outputhash = b''.join((
+                outputhash,
                 pack_le_uint64(txout.value),
                 sha256(txout.pk_script)
             ))
