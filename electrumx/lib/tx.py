@@ -34,21 +34,13 @@ from electrumx.lib.util import (
     unpack_le_int32_from, unpack_le_int64_from, unpack_le_uint16_from,
     unpack_be_uint16_from,
     unpack_le_uint32_from, unpack_le_uint64_from, pack_le_int32, pack_varint,
-    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64, unpack_le_uint256_from, pack_le_uint256
+    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64, unpack_le_uint256_from, pack_le_uint256,
+    CONTRACT_FLAG, MAX_CONTRACT_TYPE, CONTRACT_FT, CONTRACT_NFT, CONTRACT_FT_MINT, CONTRACT_NFT_MINT
 )
 from electrumx.lib.script import OpCodes
 
 ZERO = bytes(32)
 MINUS_1 = 4294967295
-
-CONTRACT_FLAG = 0x8000000000000000
-CONTRACT_FT = CONTRACT_FLAG | 0
-CONTRACT_NFT = CONTRACT_FLAG | 1
-CONTRACT_FT_MINT = CONTRACT_FLAG | 2
-CONTRACT_NFT_MINT = CONTRACT_FLAG | 3
-
-MAX_CONTRACT_TYPE = CONTRACT_FLAG | 3
-MAX_CONTRACT_METADATA_SIZE = 1024
 
 
 class Tx(namedtuple("Tx", "version inputs outputs locktime")):
@@ -110,6 +102,9 @@ class TxOutPoint(namedtuple("TxOutPoint", "hash index")):
             pack_le_uint32(self.index),
         ))
 
+    def json(self):
+        return str(self.hash.hex()) + ":" + str(self.index)
+
 class TxContractOutput(namedtuple("TxContractOutput", "type outpoint value max_supply metadata")):
     def serialize(self):
         return b''.join((
@@ -119,6 +114,23 @@ class TxContractOutput(namedtuple("TxContractOutput", "type outpoint value max_s
             pack_le_uint256(self.max_supply),
             pack_varbytes(self.metadata),
         ))
+
+    def getType(self):
+        if self.type > MAX_CONTRACT_TYPE:
+            return "None"
+        if self.type == CONTRACT_FT: return "FT"
+        if self.type == CONTRACT_NFT: return "NFT"
+        if self.type == CONTRACT_FT_MINT: return "FT_MINT"
+        if self.type == CONTRACT_NFT_MINT: return "NFT_MINT"
+
+    def json(self):
+        return {
+            "type": self.type,
+            "outpoint": self.outpoint.json(),
+            "value": self.value,
+            "max_supply": self.max_supply,
+            "metadata": str(self.metadata, 'utf-8'),
+        }
 
 class Deserializer(object):
     '''Deserializes blocks into transactions.
@@ -213,7 +225,9 @@ class Deserializer(object):
         for txout in tx.outputs:
             outputhash = b''
             if txout.contract is not None:
-                outputhash = txout.contract.serialize()
+                outputhash = b''.join((
+                    txout.contract.serialize(),
+                ))
             outputhash = b''.join((
                 outputhash,
                 pack_le_uint64(txout.value),
