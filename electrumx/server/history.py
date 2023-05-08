@@ -23,7 +23,7 @@ from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
 
 class History(object):
 
-    DB_VERSIONS = [0, 1]
+    DB_VERSIONS = [2]
 
     def __init__(self):
         self.logger = util.class_logger(__name__, self.__class__.__name__)

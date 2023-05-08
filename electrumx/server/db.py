@@ -54,7 +54,7 @@ class DB(object):
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = [6, 7, 8]
+    DB_VERSIONS = [9]
 
     class DBError(Exception):
         '''Raised on general DB errors generally indicating corruption.'''

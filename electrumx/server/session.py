@@ -989,8 +989,8 @@ class SessionBase(RPCSession):
 class ElectrumX(SessionBase):
     '''A TCP server that handles incoming Electrum connections.'''
 
-    PROTOCOL_MIN = (1, 4)
-    PROTOCOL_MAX = (1, 4, 2)
+    PROTOCOL_MIN = (1, 5)
+    PROTOCOL_MAX = (1, 5)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
