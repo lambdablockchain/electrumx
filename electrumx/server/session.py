@@ -1169,6 +1169,8 @@ class ElectrumX(SessionBase):
         utxos = await self.db.all_utxos(hashX)
         utxos = sorted(utxos)
         utxos.extend(await self.mempool.unordered_UTXOs(hashX))
+        # filter out all contracts
+        utxos = [utxo for utxo in utxos if utxo.contract is None]
         self.bump_cost(1.0 + len(utxos) / 50)
         spends = await self.mempool.potential_spends(hashX)
 
@@ -1186,6 +1188,7 @@ class ElectrumX(SessionBase):
 
     async def get_balance(self, hashX):
         utxos = await self.db.all_utxos(hashX)
+        utxos = [utxo for utxo in utxos if utxo.contract is None or utxo.value < 0]
         confirmed = sum(utxo.value for utxo in utxos)
         unconfirmed = await self.mempool.balance_delta(hashX)
         self.bump_cost(1.0 + len(utxos) / 50)
@@ -1217,7 +1220,8 @@ class ElectrumX(SessionBase):
     async def scripthash_get_history(self, scripthash):
         '''Return the confirmed and unconfirmed history of a scripthash.'''
         hashX = scripthash_to_hashX(scripthash)
-        return await self.confirmed_and_unconfirmed_history(hashX)
+        res = await self.confirmed_and_unconfirmed_history(hashX)
+        return res
 
     async def scripthash_get_mempool(self, scripthash):
         '''Return the mempool transactions touching a scripthash.'''
