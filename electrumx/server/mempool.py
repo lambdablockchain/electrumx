@@ -138,6 +138,7 @@ class MemPool(object):
         deferred = {}
         unspent = set(utxo_map)
         # Try to find all prevouts so we can accept the TX
+        # TODO // transactions with contracts dont seem to have correctly calculated hashes, causing them to get dropped and only become visible to clients once confirmed
         for tx_hash, tx in tx_map.items():
             in_pairs = []
             try:
@@ -243,7 +244,7 @@ class MemPool(object):
         hex_hashes_iter = (hash_to_hex_str(hash) for hash in hashes)
         raw_txs = await self.api.raw_transactions(hex_hashes_iter)
 
-        def deserialize_txs():    # This function is pure
+        def deserialize_txs():  # This function is pure
             to_hashX = self.coin.hashX_from_script
             deserializer = self.coin.DESERIALIZER
 
