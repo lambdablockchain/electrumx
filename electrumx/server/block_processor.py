@@ -10,6 +10,7 @@
 
 
 import asyncio
+import json
 import time
 from asyncio import sleep
 
@@ -428,8 +429,12 @@ class BlockProcessor:
                 # Get the hashX
                 hashX = script_hashX(txout.pk_script)
                 append_hashX(hashX)
-                put_utxo(tx_hash + to_le_uint32(idx),
-                         hashX + tx_numb + to_le_uint64(txout.value))
+                k = tx_hash + to_le_uint32(idx)
+                if txout.contract is None:
+                    put_utxo(k, hashX + tx_numb + to_le_uint64(txout.value))
+                else:
+                    d = json.dumps(txout.contract.json()).encode()
+                    put_utxo(k, hashX + tx_numb + to_le_uint64(txout.value) + to_le_uint32(0x69420) + to_le_uint64(len(d)) + d)
 
             append_hashXs(hashXs)
             update_touched(hashXs)
