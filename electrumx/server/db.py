@@ -31,7 +31,7 @@ from electrumx.server.storage import db_class
 from electrumx.server.history import History
 
 
-UTXO = namedtuple("UTXO", "tx_num tx_pos tx_hash height value")
+UTXO = namedtuple("UTXO", "tx_num tx_pos tx_hash height value contract")
 
 
 @attr.s(slots=True)
@@ -54,7 +54,7 @@ class DB(object):
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = [6, 7, 8]
+    DB_VERSIONS = [9]
 
     class DBError(Exception):
         '''Raised on general DB errors generally indicating corruption.'''
@@ -684,9 +684,14 @@ class DB(object):
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 tx_pos, = unpack_le_uint32(db_key[-9:-5])
                 tx_num, = unpack_le_uint64(db_key[-5:] + bytes(3))
-                value, = unpack_le_uint64(db_value)
+                value, = unpack_le_uint64(db_value[:8])
+                contractflag = unpack_le_uint32(db_value[8:12])
+                contract = ""
+                if contractflag == 0x69420:
+                    contractlength = unpack_le_uint64(db_value[12:20])
+                    contract = db_value[20:20+contractlength]
                 tx_hash, height = self.fs_tx_hash(tx_num)
-                utxos_append(UTXO(tx_num, tx_pos, tx_hash, height, value))
+                utxos_append(UTXO(tx_num, tx_pos, tx_hash, height, value, contract))
             return utxos
 
         while True:
