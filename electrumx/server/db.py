@@ -31,7 +31,7 @@ from electrumx.server.storage import db_class
 from electrumx.server.history import History
 
 
-UTXO = namedtuple("UTXO", "tx_num tx_pos tx_hash height value contract")
+UTXO = namedtuple("UTXO", "tx_num tx_pos tx_hash height value")
 
 
 @attr.s(slots=True)
@@ -54,7 +54,7 @@ class DB(object):
     it was shutdown uncleanly.
     '''
 
-    DB_VERSIONS = [9]
+    DB_VERSIONS = [6, 7, 8]
 
     class DBError(Exception):
         '''Raised on general DB errors generally indicating corruption.'''
@@ -421,7 +421,7 @@ class DB(object):
 
         return [self.coin.header_hash(header) for header in headers]
 
-    async def limited_history(self, hashX, *, limit=1000):
+    async def limited_history(self, hashX, *, limit=1000, reverse=False):
         '''Return an unpruned, sorted list of (tx_hash, height) tuples of
         confirmed transactions that touched the address, earliest in
         the blockchain first.  Includes both spending and receiving
@@ -429,7 +429,7 @@ class DB(object):
         limit to None to get them all.
         '''
         def read_history():
-            tx_nums = list(self.history.get_txnums(hashX, limit))
+            tx_nums = list(self.history.get_txnums(hashX, limit, reverse))
             fs_tx_hash = self.fs_tx_hash
             return [fs_tx_hash(tx_num) for tx_num in tx_nums]
 
@@ -684,14 +684,9 @@ class DB(object):
             for db_key, db_value in self.utxo_db.iterator(prefix=prefix):
                 tx_pos, = unpack_le_uint32(db_key[-9:-5])
                 tx_num, = unpack_le_uint64(db_key[-5:] + bytes(3))
-                value, = unpack_le_uint64(db_value[:8])
-                contractflag = unpack_le_uint32(db_value[8:12])
-                contract = ""
-                if contractflag == 0x69420:
-                    contractlength = unpack_le_uint64(db_value[12:20])
-                    contract = db_value[20:20+contractlength]
+                value, = unpack_le_uint64(db_value)
                 tx_hash, height = self.fs_tx_hash(tx_num)
-                utxos_append(UTXO(tx_num, tx_pos, tx_hash, height, value, contract))
+                utxos_append(UTXO(tx_num, tx_pos, tx_hash, height, value))
             return utxos
 
         while True:
