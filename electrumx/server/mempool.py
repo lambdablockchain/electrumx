@@ -16,7 +16,8 @@ import attr
 from aiorpcx import TaskGroup, run_in_thread, sleep
 
 from electrumx.lib.hash import hash_to_hex_str, hex_str_to_hash
-from electrumx.lib.util import class_logger, chunks
+from electrumx.lib.util import class_logger, chunks, pack_le_uint32
+from electrumx.lib.script import Script
 from electrumx.server.db import UTXO
 
 
@@ -28,6 +29,7 @@ class MemPoolTx(object):
     out_pairs = attr.ib()
     fee = attr.ib()
     size = attr.ib()
+    out_srefs = attr.ib()
 
 
 @attr.s(slots=True)
@@ -107,6 +109,7 @@ class MemPool(object):
         self.logger = class_logger(__name__, self.__class__.__name__)
         self.txs = {}
         self.hashXs = defaultdict(set)  # None can be a key
+        self.srefs = defaultdict(list) # Ordered list to keep track of first and last srefs transactions
         self.refresh_secs = refresh_secs
         self.log_status_secs = log_status_secs
 
@@ -133,12 +136,12 @@ class MemPool(object):
         Returns an (unprocessed tx_map, unspent utxo_map) pair.
         '''
         hashXs = self.hashXs
+        srefs = self.srefs
         txs = self.txs
 
         deferred = {}
         unspent = set(utxo_map)
         # Try to find all prevouts so we can accept the TX
-        # TODO // transactions with contracts dont seem to have correctly calculated hashes, causing them to get dropped and only become visible to clients once confirmed
         for tx_hash, tx in tx_map.items():
             in_pairs = []
             try:
@@ -167,6 +170,13 @@ class MemPool(object):
             for hashX, _value in itertools.chain(tx.in_pairs, tx.out_pairs):
                 touched.add(hashX)
                 hashXs[hashX].add(tx_hash)
+
+            for ref_hashes in tx.out_srefs:
+                if ref_hashes:
+                    for ref_hash in ref_hashes:
+                        touched.add(ref_hash)
+                        hashXs[ref_hash].add(tx_hash)
+                        srefs[ref_hash].append(tx_hash)
 
         return deferred, {prevout: utxo_map[prevout] for prevout in unspent}
 
@@ -198,6 +208,7 @@ class MemPool(object):
         # Re-sync with the new set of hashes
         txs = self.txs
         hashXs = self.hashXs
+        srefs = self.srefs
 
         if mempool_height != self.api.db_height():
             raise DBSyncError
@@ -207,10 +218,15 @@ class MemPool(object):
             tx = txs.pop(tx_hash)
             tx_hashXs = set(hashX for hashX, value in tx.in_pairs)
             tx_hashXs.update(hashX for hashX, value in tx.out_pairs)
+            tx_hashXs.update(ref_hash for ref_hashes in tx.out_srefs for ref_hash in ref_hashes)
             for hashX in tx_hashXs:
                 hashXs[hashX].remove(tx_hash)
                 if not hashXs[hashX]:
                     del hashXs[hashX]
+                if tx_hash in srefs[hashX]:
+                    srefs[hashX].remove(tx_hash)
+                if not srefs[hashX]:
+                    del srefs[hashX]
             touched.update(tx_hashXs)
 
         # Process new transactions
@@ -244,7 +260,7 @@ class MemPool(object):
         hex_hashes_iter = (hash_to_hex_str(hash) for hash in hashes)
         raw_txs = await self.api.raw_transactions(hex_hashes_iter)
 
-        def deserialize_txs():  # This function is pure
+        def deserialize_txs():    # This function is pure
             to_hashX = self.coin.hashX_from_script
             deserializer = self.coin.DESERIALIZER
 
@@ -260,10 +276,30 @@ class MemPool(object):
                 txin_pairs = tuple((txin.prev_hash, txin.prev_idx)
                                    for txin in tx.inputs
                                    if not txin.is_generation())
-                txout_pairs = tuple((to_hashX(txout.pk_script), txout.value)
+                txout_pairs = tuple((to_hashX(Script.zero_refs(txout.pk_script)), txout.value)
                                     for txout in tx.outputs)
+
+                out_srefs = []
+                for txout in tx.outputs:
+                    normal_refs, singleton_refs = Script.get_push_input_refs(txout.pk_script)[1:]
+
+                    normal_mints = []
+                    for ref in normal_refs[0:3]:
+                        for txin in tx.inputs:
+                            if txin.prev_hash == ref[:32] and pack_le_uint32(txin.prev_idx) == ref[32:]:
+                                normal_mints.append(ref)
+
+                    track_refs = normal_mints[0:3] + singleton_refs[0:3]
+
+                    if len(track_refs) > 0:
+                        ref_hashes = [to_hashX(ref) for ref in track_refs]
+                        out_srefs.append(ref_hashes)
+                    else:
+                        out_srefs.append([])
+
                 txs[tx_hash] = MemPoolTx(txin_pairs, None, txout_pairs,
-                                         0, tx_size)
+                                         0, tx_size, out_srefs)
+
             return txs
 
         # Thread this potentially slow operation so as not to block
@@ -345,3 +381,18 @@ class MemPool(object):
                 if hX == hashX:
                     utxos.append(UTXO(-1, pos, tx_hash, 0, value))
         return utxos
+
+    async def first_last_summaries(self, hashX):
+        '''Return first and last UTXO tuples from mempool transactions that contain a singleton ref hash.'''
+        tx_hashes = self.srefs.get(hashX, [])
+        if not tx_hashes:
+            return []
+
+        result = []
+        # Get first and last, remove duplicate if there is only 1
+        for tx_hash in list(dict.fromkeys([tx_hashes[0], tx_hashes[-1]])):
+            tx = self.txs[tx_hash]
+            has_ui = any(hash in self.txs for hash, idx in tx.prevouts)
+            result.append(MemPoolTxSummary(tx_hash, tx.fee, has_ui))
+
+        return result
