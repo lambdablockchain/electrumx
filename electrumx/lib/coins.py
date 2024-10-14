@@ -36,7 +36,7 @@ from decimal import Decimal
 from hashlib import sha256
 
 from electrumx.lib import util
-from electrumx.lib.hash import Base58, double_sha256, hash_to_hex_str, tagged_sha256d
+from electrumx.lib.hash import Base58, double_sha256,  hash_to_hex_str
 from electrumx.lib.hash import HASHX_LEN
 from electrumx.lib.script import ScriptPubKey
 import electrumx.lib.tx as lib_tx
@@ -55,23 +55,23 @@ class CoinError(Exception):
 class Coin:
     '''Base class of coin hierarchy.'''
 
-    SHORTNAME = "BSV"
+    SHORTNAME = "LMC"
     NET = "mainnet"
     REORG_LIMIT = 200
     # Not sure if these are coin-specific
     RPC_URL_REGEX = re.compile('.+@(\\[[0-9a-fA-F:]+\\]|[^:]+)(:[0-9]+)?')
     VALUE_PER_COIN = 100000000
     SESSIONCLS = ElectrumX
-    DEFAULT_MAX_SEND = 10000000000
+    DEFAULT_MAX_SEND = 10000000
     DESERIALIZER = lib_tx.Deserializer
     DAEMON = daemon.Daemon
     BLOCK_PROCESSOR = block_proc.BlockProcessor
     P2PKH_VERBYTE = bytes.fromhex("00")
     P2SH_VERBYTES = [bytes.fromhex("05")]
-    RPC_PORT = 8665
-    GENESIS_HASH = ('0000000000b3de1ef5bd7c20708dbafc'
-                    '3df0441877fa4a59cda22b4c2d4f39ce')
-    GENESIS_ACTIVATION = 100_000_000
+    RPC_PORT = 9332
+    GENESIS_HASH = ('00000000343953f1ed4881e476c9e120'
+                    '6976bfcf2cc86872d28ff6df9d879d18')
+    GENESIS_ACTIVATION = 0
     # Peer discovery
     PEER_DEFAULT_PORTS = {'t': '50001', 's': '50002'}
     PEERS = []
@@ -110,9 +110,9 @@ class Coin:
 
     @classmethod
     def max_fetch_blocks(cls, height):
-        if height < 130000:
-            return 1000
-        return 100
+        if height < 13000:
+            return 1
+        return 1
 
     @classmethod
     def genesis_block(cls, block):
@@ -170,7 +170,7 @@ class Coin:
     @classmethod
     def header_hash(cls, header):
         '''Given a header return hash'''
-        return tagged_sha256d(header)
+        return double_sha256(header)
 
     @classmethod
     def header_prevhash(cls, header):
@@ -194,82 +194,81 @@ class Coin:
         return Decimal(value) / cls.VALUE_PER_COIN
 
 
-class Novo(Coin):
-    NAME = "Novo"
-    TX_COUNT = 1000
-    TX_COUNT_HEIGHT = 2000
-    TX_PER_BLOCK = 10
-    CHAIN_SIZE = 1_623_944_264_227
-    CHAIN_SIZE_HEIGHT = 709_728
-    AVG_BLOCK_SIZE = 150_000_000
+class Lambda(Coin):
+    NAME = "Lambda"
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
+    TX_PER_BLOCK = 400
     PEERS = [
     ]
     GENESIS_ACTIVATION = 0
+    RPC_PORT = 9332
 
-class BitcoinSV(Coin):
-    NAME = "BitcoinSV"
-    TX_COUNT = 267318795
-    TX_COUNT_HEIGHT = 557037
-    TX_PER_BLOCK = 400
-    PEERS = [
-        'electrumx.bitcoinsv.io s',
-        'satoshi.vision.cash s',
-        'sv.usebsv.com s t',
-        'sv.satoshi.io s t',
-    ]
-    GENESIS_ACTIVATION = 620_538
-
-
-class BitcoinTestnetMixin:
+class LambdaTestnetMixin:
     SHORTNAME = "XTN"
     NET = "testnet"
     P2PKH_VERBYTE = bytes.fromhex("6f")
     P2SH_VERBYTES = [bytes.fromhex("c4")]
     WIF_BYTE = bytes.fromhex("ef")
-    GENESIS_HASH = ('000000000933ea01ad0ee984209779ba'
-                    'aec3ced90fa3f408719526f8d77f4943')
+    GENESIS_HASH = (''
+                    '')
     REORG_LIMIT = 8000
-    TX_COUNT = 12242438
-    TX_COUNT_HEIGHT = 1035428
+    TX_COUNT = 1
+    TX_COUNT_HEIGHT = 1
     TX_PER_BLOCK = 21
-    RPC_PORT = 18332
+    RPC_PORT = 19332
     PEER_DEFAULT_PORTS = {'t': '51001', 's': '51002'}
 
-
-class BitcoinSVTestnet(BitcoinTestnetMixin, Coin):
-    '''Bitcoin Testnet for Bitcoin SV daemons.'''
-    NAME = "BitcoinSV"
+class LambdaTestnet(LambdaTestnetMixin, Coin):
+    '''Lambda Testnet for Lambda daemons.'''
+    GENESIS_HASH = ('')
+    NAME = "LambdaTestnet"
     PEERS = [
-        'electrontest.cascharia.com t51001 s51002',
     ]
-    GENESIS_ACTIVATION = 1_344_302
+    GENESIS_ACTIVATION = 0
+    RPC_PORT = 19332 
 
-
-class BitcoinSVScalingTestnet(BitcoinSVTestnet):
+class LambdaTestnet4(LambdaTestnetMixin, Coin):
+    '''Lambda Testnet4 for Lambda daemons.'''
+    GENESIS_HASH = ('')
+    NAME = "LambdaTestnet4"
+    PEERS = [
+    ]
+    GENESIS_ACTIVATION = 0
+    RPC_PORT = 29332 
+# 
+class LambdaScalingTestnet(LambdaTestnet):
     NET = "scalingtest"
+    GENESIS_HASH = ('')
     PEERS = [
-        'stn-server.electrumsv.io t51001 s51002',
     ]
-    TX_COUNT = 2015
-    TX_COUNT_HEIGHT = 5711
+    TX_COUNT = 1000
+    TX_COUNT_HEIGHT = 1000
     TX_PER_BLOCK = 5000
-    GENESIS_ACTIVATION = 14_896
+    GENESIS_ACTIVATION = 0
+    RPC_PORT = 39332 
 
     @classmethod
     def max_fetch_blocks(cls, height):
-        if height <= 10:
-            return 100
+        if height <= 100:
+            return 10
         return 3
 
-
-class BitcoinSVRegtest(BitcoinSVTestnet):
+class LambdaRegtest(LambdaTestnet):
     NET = "regtest"
-    GENESIS_HASH = ('0f9188f13cb7b2c71f2a335e3a4fc328'
-                    'bf5beb436012afca590b1a11466e2206')
+    GENESIS_HASH = (''
+                    '')
     PEERS = []
     TX_COUNT = 1
     TX_COUNT_HEIGHT = 1
-    GENESIS_ACTIVATION = 10_000
+    GENESIS_ACTIVATION = 0
+    RPC_PORT = 17443
 
-
-Bitcoin = BitcoinSV
+class Lambda(Coin):
+    NAME = "Lambda"
+    TX_COUNT = 1000
+    TX_COUNT_HEIGHT = 2000
+    TX_PER_BLOCK = 10
+    PEERS = [
+    ]
+    GENESIS_ACTIVATION = 0
