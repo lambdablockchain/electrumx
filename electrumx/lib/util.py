@@ -145,9 +145,10 @@ def subclasses(base_class, strict=True):
     return [pair[1] for pair in pairs]
 
 
-def chunks(items, size):
+def chunks(items, size, reverse=False):
     '''Break up items, an iterable, into chunks of length size.'''
-    for i in range(0, len(items), size):
+    r = range(0, len(items), size)
+    for i in reversed(r) if reverse else r:
         yield items[i: i + size]
 
 
@@ -330,17 +331,6 @@ pack_be_uint16 = struct_be_H.pack
 pack_be_uint32 = struct_be_I.pack
 pack_byte = structB.pack
 
-def pack_le_uint256(x):
-    return x.to_bytes(32, byteorder='little', signed=False)
-
-def unpack_le_uint256(x):
-    return (
-        int.from_bytes(x, byteorder='little', signed=False),
-    )
-
-def unpack_le_uint256_from(binary, offset):
-    return unpack_le_uint256(binary[offset:offset + 32])
-
 hex_to_bytes = bytes.fromhex
 
 
@@ -356,12 +346,3 @@ def pack_varint(n):
 
 def pack_varbytes(data):
     return pack_varint(len(data)) + data
-
-CONTRACT_FLAG = 0x8000000000000000
-CONTRACT_FT = CONTRACT_FLAG | 0
-CONTRACT_NFT = CONTRACT_FLAG | 1
-CONTRACT_FT_MINT = CONTRACT_FLAG | 2
-CONTRACT_NFT_MINT = CONTRACT_FLAG | 3
-
-MAX_CONTRACT_TYPE = CONTRACT_FLAG | 3
-MAX_CONTRACT_METADATA_SIZE = 1024
