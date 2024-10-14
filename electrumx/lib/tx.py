@@ -1,3 +1,52 @@
+# This license can be used by developers, projects or companies who wish to make their software or applications available for open (free) usage only on the Lambda Blockchains.
+# 
+# Copyright (c) 2022 The Lambda Blockchain Developers
+# 
+# Open Lambda Blockchain (RAD) License Version 1
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#  
+# 1 - The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+# 
+# 2 - The Software, and any software that is derived from the Software or parts thereof,
+# can only be used on the Lambda (RAD) blockchains. The Lambda (RAD) blockchains are defined,
+# for purposes of this license, as the Lambda (RAD) blockchains containing block height #10,459
+# with the hash "0000000000229980bb7bcf653ebb94d6ffe18fed6cd3a3a98b876312414cb831" and that 
+# contains the longest persistent chain of blocks accepted by this Software, as well as the test 
+# blockchains that contain the longest persistent chains of blocks accepted by this Software.
+# 
+# 3 - The Software, and any software that is derived from the Software or parts thereof, can only
+# be used on Lambda (RAD) blockchain that maintains the original difficulty adjustment algorithm, 
+# maintains the block subsidy emission rate defined in the original version of this Software, and 
+# ensures all coins are spendable in the normal manner without either subverting, undermining, 
+# changing, diminishing, nullifying, hijacking, or altering the way existing coins can be spent. Any 
+# attempt or proposal by an entity to violate, change, or remove the logic for verifying 
+# digital chains of signatures for existing coins will be deemed a violation of this license 
+# and that entity must cease to use the Software immediately.
+# 
+# 4 - Users and providers of the Software agree to insure themselves against any loss of any kind
+# if they wish to mitigate the effects of theft or error. The Users and providers agree
+# and understand that under no circumstances will there be recourse through Lambda (RAD) blockchain
+# providers via subverting, undermining, changing, diminishing, nullifying, hijacking, or altering 
+# the way existing coins can be spent and the proper functioning of the verification of chains of 
+# digital signatures.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+# Previous version of the software are copyright and licensed as follows:
+
 # Copyright (c) 2016-2017, Neil Booth
 # Copyright (c) 2017, the ElectrumX authors
 #
@@ -34,11 +83,9 @@ from electrumx.lib.util import (
     unpack_le_int32_from, unpack_le_int64_from, unpack_le_uint16_from,
     unpack_be_uint16_from,
     unpack_le_uint32_from, unpack_le_uint64_from, pack_le_int32, pack_varint,
-    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64, unpack_le_uint256_from, pack_le_uint256,
-    CONTRACT_FLAG, MAX_CONTRACT_TYPE, CONTRACT_FT, CONTRACT_NFT, CONTRACT_FT_MINT, CONTRACT_NFT_MINT
+    pack_le_uint32, pack_le_int64, pack_varbytes, pack_le_uint64
 )
-from electrumx.lib.script import OpCodes
-
+from electrumx.lib.script import Script
 ZERO = bytes(32)
 MINUS_1 = 4294967295
 
@@ -59,7 +106,6 @@ class Tx(namedtuple("Tx", "version inputs outputs locktime")):
 
 class TxInput(namedtuple("TxInput", "prev_hash prev_idx script sequence")):
     '''Class representing a transaction input.'''
-
     def __str__(self):
         script = self.script.hex()
         prev_hash = hash_to_hex_str(self.prev_hash)
@@ -79,58 +125,14 @@ class TxInput(namedtuple("TxInput", "prev_hash prev_idx script sequence")):
         ))
 
 
-class TxOutput(namedtuple("TxOutput", "value pk_script contract")):
+class TxOutput(namedtuple("TxOutput", "value pk_script")):
 
-    def serialize(self):
-        if self.contract:
-            return b''.join((
-                self.contract.serialize(),
-                pack_le_uint64(self.value),
-                pack_varbytes(self.pk_script),
-            ))
-        else:
-            return b''.join((
-                pack_le_int64(self.value),
-                pack_varbytes(self.pk_script),
-            ))
-
-
-class TxOutPoint(namedtuple("TxOutPoint", "hash index")):
     def serialize(self):
         return b''.join((
-            self.hash,
-            pack_le_uint32(self.index),
+            pack_le_int64(self.value),
+            pack_varbytes(self.pk_script),
         ))
 
-    def json(self):
-        return str(self.hash.hex()) + ":" + str(self.index)
-
-class TxContractOutput(namedtuple("TxContractOutput", "type outpoint value max_supply metadata")):
-    def serialize(self):
-        return b''.join((
-            pack_le_uint64(self.type),
-            self.outpoint.serialize(),
-            pack_le_uint256(self.value),
-            pack_le_uint256(self.max_supply),
-            pack_varbytes(self.metadata),
-        ))
-
-    def getType(self):
-        if self.type > MAX_CONTRACT_TYPE:
-            return "None"
-        if self.type == CONTRACT_FT: return "FT"
-        if self.type == CONTRACT_NFT: return "NFT"
-        if self.type == CONTRACT_FT_MINT: return "FT_MINT"
-        if self.type == CONTRACT_NFT_MINT: return "NFT_MINT"
-
-    def json(self):
-        return {
-            "type": self.type,
-            "outpoint": self.outpoint.json(),
-            "value": self.value,
-            "max_supply": self.max_supply,
-            "metadata": str(self.metadata, 'utf-8'),
-        }
 
 class Deserializer(object):
     '''Deserializes blocks into transactions.
@@ -152,8 +154,8 @@ class Deserializer(object):
         '''Return a deserialized transaction.'''
         return Tx(
             self._read_le_int32(),  # version
-            self._read_inputs(),  # inputs
-            self._read_outputs(),  # outputs
+            self._read_inputs(),    # inputs
+            self._read_outputs(),   # outputs
             self._read_le_uint32()  # locktime
         )
 
@@ -164,88 +166,81 @@ class Deserializer(object):
         we process it in the natural serialized order.
         '''
         start = self.cursor
-        # return self.read_tx(), double_sha256(self.binary[start:self.cursor])
         the_tx = self.read_tx()
-        if the_tx.version == 2:
-            return the_tx, self.get_richtransaction(the_tx)
+        # If the transaction is version 3, then we use the alternative txid generation scheme
+        if the_tx.version == 3:
+            return the_tx, self.get_transaction_hash_preimage_v3(the_tx)
         else:
             return the_tx, double_sha256(self.binary[start:self.cursor])
 
-    def get_richtransaction(self, tx):
-        hashInputs = self.get_hashinputs(tx)
-        hashoutputs = self.get_hashoutputs(tx)
-
+    # Get the double_sha256 of the transaction preimage used for generating the new txid
+    # The benefits of using version 3 is we can do compressed induction proofs
+    def get_transaction_hash_preimage_v3(self, tx):
+        hashPrevInputs = self.get_hash_prev_inputs(tx)
+        hashSequence = self.get_hash_sequence(tx)
+        hashOutputHashes = self.get_hash_output_hashes(tx)
         preimage = b''.join((
             pack_le_uint32(tx.version),
             pack_le_int32(len(tx.inputs)),
-            hashInputs,
+            hashPrevInputs,
+            hashSequence,
             pack_le_int32(len(tx.outputs)),
-            hashoutputs,
+            hashOutputHashes,
             pack_le_uint32(tx.locktime)
         ))
-        h = double_sha256(preimage)
-        return h
-
-    def get_hashinputs(self, tx):
+        return double_sha256(preimage)
+ 
+    def get_hash_prev_inputs(self, tx):
         inputs = b''
         for txin in tx.inputs:
-            inputhash = b''.join((
-                txin.prev_hash,
-                pack_le_uint32(txin.prev_idx),
-                sha256(txin.script),
-                pack_le_uint32(txin.sequence)
-            ))
             inputs = b''.join((
                 inputs,
-                sha256(inputhash)
+                txin.prev_hash,
+                pack_le_uint32(txin.prev_idx),
+                double_sha256(txin.script)
             ))
-        return sha256(inputs)
+        h = double_sha256(inputs)
+        return h
+ 
+    def get_hash_sequence(self, tx):
+        inputs = b''
+        for txin in tx.inputs:
+            inputs = b''.join((
+                inputs,
+                pack_le_uint32(txin.sequence)
+            ))
+        h = double_sha256(inputs)
+        return h
 
-    def get_state(self, script):
-        pc = len(script)
-        # opreturn + state + stateLen + version
-        if len(script) < 1 + 0 + 4 + 1:
-            return False
+    # Generate the hash of the output hashes
+    def calculate_pushrefs_count_and_hash(self, pk_script):
+        zeroRef = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        all_refs, normal_refs, singleton_refs = Script.get_push_input_refs(pk_script)
+        # Put refs into a dict to sort in order
+        ref_dict = {}
+        for ref in all_refs:
+            ref_dict[ref] = True 
+        push_input_refs_hash = None
+        if len(ref_dict) > 0:
+            push_input_refs_hash = double_sha256(b''.join(sorted(ref_dict.keys())))
+        else:
+            push_input_refs_hash = zeroRef
+        
+        result = b''.join((pack_le_uint32(len(ref_dict) ), push_input_refs_hash))
+        return result
 
-        pc -= 5
-
-        stateLen, = unpack_le_uint32_from(script[pc:])
-        if len(script) < 1 + stateLen + 4 + 1:
-            return False
-
-        pc -= stateLen
-
-        if script[pc - 1] != OpCodes.OP_RETURN:
-            return False
-
-        return pc
-
-    def get_hashoutputs(self, tx):
+    # Generate the hash of the output hashes
+    def get_hash_output_hashes(self, tx):
         outputs = b''
         for txout in tx.outputs:
-            outputhash = b''
-            if txout.contract is not None:
-                outputhash = b''.join((
-                    txout.contract.serialize(),
-                ))
-            outputhash = b''.join((
-                outputhash,
-                pack_le_uint64(txout.value),
-                sha256(txout.pk_script)
-            ))
-            pc = self.get_state(txout.pk_script)
-            if pc:
-                outputhash = b''.join((
-                    outputhash,
-                    sha256(txout.pk_script[0:pc]),
-                    sha256(txout.pk_script[pc:len(txout.pk_script)]),
-                ))
-                print("success")
             outputs = b''.join((
                 outputs,
-                sha256(outputhash)
+                pack_le_uint64(txout.value),
+                double_sha256(txout.pk_script),
+                self.calculate_pushrefs_count_and_hash(txout.pk_script),
             ))
-        return sha256(outputs)
+        h = double_sha256(outputs)
+        return h
 
     def read_tx_and_vsize(self):
         '''Return a (deserialized TX, vsize) pair.'''
@@ -263,10 +258,10 @@ class Deserializer(object):
 
     def _read_input(self):
         return TxInput(
-            self._read_nbytes(32),  # prev_hash
+            self._read_nbytes(32),   # prev_hash
             self._read_le_uint32(),  # prev_idx
-            self._read_varbytes(),  # script
-            self._read_le_uint32()  # sequence
+            self._read_varbytes(),   # script
+            self._read_le_uint32()   # sequence
         )
 
     def _read_outputs(self):
@@ -274,31 +269,9 @@ class Deserializer(object):
         return [read_output() for i in range(self._read_varint())]
 
     def _read_output(self):
-        _cursor = self.cursor
-        contract_type = self._read_le_uint64()
-        contract_out = None
-        is_contract = contract_type & CONTRACT_FLAG and MAX_CONTRACT_TYPE >= contract_type
-        self.cursor = _cursor
-        if is_contract: contract_out = self._read_contract_out()
         return TxOutput(
-            self._read_le_int64(),
-            self._read_varbytes(),
-            contract_out,
-        )
-
-    def _read_outpoint(self):
-        return TxOutPoint(
-            self._read_nbytes(32),  # hash
-            self._read_le_uint32()  # idx
-        )
-
-    def _read_contract_out(self):
-        return TxContractOutput(
-            self._read_le_uint64(),  # contract_type
-            self._read_outpoint(),  # outpoint
-            self._read_uint256(),  # value
-            self._read_uint256(),  # max supply
-            self._read_varbytes(),  # metadata
+            self._read_le_int64(),  # value
+            self._read_varbytes(),  # pk_script
         )
 
     def _read_byte(self):
@@ -354,9 +327,4 @@ class Deserializer(object):
     def _read_le_uint64(self):
         result, = unpack_le_uint64_from(self.binary, self.cursor)
         self.cursor += 8
-        return result
-
-    def _read_uint256(self):
-        result, = unpack_le_uint256_from(self.binary, self.cursor)
-        self.cursor += 32
         return result
