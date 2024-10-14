@@ -23,7 +23,7 @@ from electrumx.lib.hash import hash_to_hex_str, HASHX_LEN
 
 class History(object):
 
-    DB_VERSIONS = [2]
+    DB_VERSIONS = [0, 1]
 
     def __init__(self):
         self.logger = util.class_logger(__name__, self.__class__.__name__)
@@ -187,15 +187,15 @@ class History(object):
 
         self.logger.info(f'backing up removed {nremoves:,d} history entries')
 
-    def get_txnums(self, hashX, limit=1000):
+    def get_txnums(self, hashX, limit=1000, reverse=False):
         '''Generator that returns an unpruned, sorted list of tx_nums in the
         history of a hashX.  Includes both spending and receiving
         transactions.  By default yields at most 1000 entries.  Set
         limit to None to get them all.  '''
         limit = util.resolve_limit(limit)
         chunks = util.chunks
-        for _key, hist in self.db.iterator(prefix=hashX):
-            for tx_numb in chunks(hist, 5):
+        for _key, hist in self.db.iterator(prefix=hashX, reverse=reverse):
+            for tx_numb in chunks(hist, 5, reverse):
                 if limit == 0:
                     return
                 tx_num, = unpack_le_uint64(tx_numb + bytes(3))
